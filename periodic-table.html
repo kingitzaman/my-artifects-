@@ -1,0 +1,77 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Periodic Table</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#1a1a19;--fg:#e9e7df;--dim:rgba(233,231,223,.5);--pill:#2b2b29;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a1a19;--fg:#e9e7df;--dim:rgba(233,231,223,.5);--pill:#2b2b29}}
+:root[data-theme="dark"]{--bg:#1a1a19;--fg:#e9e7df;--dim:rgba(233,231,223,.5);--pill:#2b2b29}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:'Space Mono',ui-monospace,Menlo,monospace;overflow:hidden}
+#view{position:fixed;inset:0;perspective:1200px;overflow:hidden;touch-action:none;cursor:grab}
+#view:active{cursor:grabbing}
+#stage{position:absolute;left:50%;top:50%;width:0;height:0;transform-style:preserve-3d}
+.el{position:absolute;left:50%;top:50%;width:100px;height:120px;box-sizing:border-box;padding:7px 8px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;cursor:pointer;pointer-events:auto;
+ color:hsl(var(--h) 75% 62%);border:1px solid hsl(var(--h) 70% 55% / .6);border-radius:6px;background:hsl(var(--h) 70% 45% / .13);box-shadow:0 0 14px hsl(var(--h) 80% 50% / .25);
+ transform:var(--t) translate(-50%,-50%);transition:transform 1.7s cubic-bezier(.7,0,.2,1),width .35s,height .35s,background .2s;transition-delay:var(--d,0s),0s,0s,0s}
+.init{transition:none!important}
+.el:hover{background:hsl(var(--h) 70% 45% / .3)}
+.el .n{align-self:flex-end;font-size:11px;opacity:.7}
+.el .s{font-size:38px;font-weight:700;text-align:center;line-height:1;text-shadow:0 0 10px hsl(var(--h) 80% 60% / .6)}
+.el .m{font-size:10px;text-align:center;opacity:.75;white-space:nowrap}
+.el .d{display:none;font-size:11px;line-height:1.55;opacity:.8}
+.el.on{width:210px;height:210px;z-index:5;padding:14px;align-items:flex-start;justify-content:flex-start;gap:8px;background:hsl(var(--h) 45% 12% / .96);transform:var(--t) translateZ(90px) translate(-50%,-50%);transition-delay:0s}
+.el.on .n{position:absolute;right:14px;top:12px;font-size:14px}
+.el.on .s{font-size:16px;text-align:left;text-shadow:none;opacity:.8}
+.el.on .m{font-size:23px;font-weight:700;text-align:left;opacity:1;margin-top:10px}
+.el.on .d{display:block;margin-top:auto}
+.bar{position:fixed;left:0;right:0;display:flex;justify-content:center;gap:6px;pointer-events:none;z-index:10}
+#top{top:0;padding-top:calc(env(safe-area-inset-top,0px) + 14px)}
+#bot{bottom:0;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 14px);font-size:10px;letter-spacing:.1em;color:var(--dim)}
+button{pointer-events:auto;font:inherit;font-size:12px;color:var(--dim);background:var(--pill);border:0;border-radius:4px;padding:6px 10px;cursor:pointer}
+button.on{background:#e9e7df;color:#1a1a19}
+@media (prefers-reduced-motion:reduce){.el{transition-duration:.01s!important}}
+</style></head><body>
+<div id="view"><div id="stage"></div></div>
+<div class="bar" id="top"><button class="on" data-m="table">table</button><button data-m="sphere">sphere</button><button data-m="helix">helix</button><button data-m="grid">grid</button></div>
+<div class="bar" id="bot">drag to rotate · scroll or pinch to zoom · tap an element</div>
+<script>
+(function(){
+var D="H Hydrogen 1.008|He Helium 4.0026|Li Lithium 6.94|Be Beryllium 9.0122|B Boron 10.81|C Carbon 12.011|N Nitrogen 14.007|O Oxygen 15.999|F Fluorine 18.998|Ne Neon 20.180|Na Sodium 22.990|Mg Magnesium 24.305|Al Aluminium 26.982|Si Silicon 28.085|P Phosphorus 30.974|S Sulfur 32.06|Cl Chlorine 35.45|Ar Argon 39.948|K Potassium 39.098|Ca Calcium 40.078|Sc Scandium 44.956|Ti Titanium 47.867|V Vanadium 50.942|Cr Chromium 51.996|Mn Manganese 54.938|Fe Iron 55.845|Co Cobalt 58.933|Ni Nickel 58.693|Cu Copper 63.546|Zn Zinc 65.38|Ga Gallium 69.723|Ge Germanium 72.630|As Arsenic 74.922|Se Selenium 78.971|Br Bromine 79.904|Kr Krypton 83.798|Rb Rubidium 85.468|Sr Strontium 87.62|Y Yttrium 88.906|Zr Zirconium 91.224|Nb Niobium 92.906|Mo Molybdenum 95.95|Tc Technetium 98|Ru Ruthenium 101.07|Rh Rhodium 102.91|Pd Palladium 106.42|Ag Silver 107.87|Cd Cadmium 112.41|In Indium 114.82|Sn Tin 118.71|Sb Antimony 121.76|Te Tellurium 127.60|I Iodine 126.90|Xe Xenon 131.29|Cs Caesium 132.91|Ba Barium 137.33|La Lanthanum 138.91|Ce Cerium 140.12|Pr Praseodymium 140.91|Nd Neodymium 144.24|Pm Promethium 145|Sm Samarium 150.36|Eu Europium 151.96|Gd Gadolinium 157.25|Tb Terbium 158.93|Dy Dysprosium 162.50|Ho Holmium 164.93|Er Erbium 167.26|Tm Thulium 168.93|Yb Ytterbium 173.05|Lu Lutetium 174.97|Hf Hafnium 178.49|Ta Tantalum 180.95|W Tungsten 183.84|Re Rhenium 186.21|Os Osmium 190.23|Ir Iridium 192.22|Pt Platinum 195.08|Au Gold 196.97|Hg Mercury 200.59|Tl Thallium 204.38|Pb Lead 207.2|Bi Bismuth 208.98|Po Polonium 209|At Astatine 210|Rn Radon 222|Fr Francium 223|Ra Radium 226|Ac Actinium 227|Th Thorium 232.04|Pa Protactinium 231.04|U Uranium 238.03|Np Neptunium 237|Pu Plutonium 244|Am Americium 243|Cm Curium 247|Bk Berkelium 247|Cf Californium 251|Es Einsteinium 252|Fm Fermium 257|Md Mendelevium 258|No Nobelium 259|Lr Lawrencium 266|Rf Rutherfordium 267|Db Dubnium 268|Sg Seaborgium 269|Bh Bohrium 270|Hs Hassium 277|Mt Meitnerium 278|Ds Darmstadtium 281|Rg Roentgenium 282|Cn Copernicium 285|Nh Nihonium 286|Fl Flerovium 289|Mc Moscovium 290|Lv Livermorium 293|Ts Tennessine 294|Og Oganesson 294".split('|');
+var rg=function(a,b){var r=[];for(;a<=b;a++)r.push(a);return r};
+var CATS=[['Alkali metal',30,[3,11,19,37,55,87]],['Alkaline earth',52,[4,12,20,38,56,88]],['Noble gas',14,[2,10,18,36,54,86,118]],['Halogen',345,[9,17,35,53,85,117]],['Nonmetal',5,[1,6,7,8,15,16,34]],['Metalloid',85,[5,14,32,33,51,52]],['Post-transition metal',165,[13,31,49,50,81,82,83,84,113,114,115,116]],['Lanthanide',182,rg(57,71)],['Actinide',198,rg(89,103)]];
+function cat(n){for(var i=0;i<CATS.length;i++)if(CATS[i][2].indexOf(n)>-1)return CATS[i];return['Transition metal',130]}
+function pos(n){if(n==1)return[1,1];if(n==2)return[18,1];if(n<5)return[n-2,2];if(n<11)return[n+8,2];if(n<13)return[n-10,3];if(n<19)return[n,3];if(n<37)return[n-18,4];if(n<55)return[n-36,5];if(n<57)return[n-54,6];if(n<72)return[n-54,9];if(n<87)return[n-68,6];if(n<89)return[n-86,7];if(n<104)return[n-86,10];return[n-100,7]}
+var stage=document.getElementById('stage'),view=document.getElementById('view'),els=[],N=D.length,P=1200;
+D.forEach(function(r,i){var a=r.split(' '),n=i+1,p=pos(n),c=cat(n),f=n>56&&n<72||n>88&&n<104,e=document.createElement('div');
+ e.className='el init';e.style.setProperty('--h',c[1]);
+ e.innerHTML='<div class="n">'+n+'</div><div class="s">'+a[0]+'</div><div class="m">'+a[1]+'</div><div class="d">Atomic mass '+a[2]+' u<br>Group '+(f?'—':p[0])+'<br>Period '+(p[1]<8?p[1]:p[1]==9?6:7)+'<br>'+c[0]+'</div>';
+ e.p=p;stage.appendChild(e);els.push(e)});
+var rnd=Math.random,TP=Math.PI*2;
+function face(x,y,z){var l=Math.hypot(x,y,z)||1;return[Math.atan2(x/l,z/l),-Math.asin(y/l)]}
+function put(e,x,y,z,ry,rx){e.style.setProperty('--t','translate3d('+x+'px,'+y+'px,'+z+'px) rotateY('+ry+'rad) rotateX('+rx+'rad)')}
+var L={
+ table:function(e,i){var r=e.p[1];if(r==9)r=8.7;if(r==10)r=9.7;put(e,(e.p[0]-9.5)*108,(r-5.3)*130,0,0,0)},
+ sphere:function(e,i){var ph=Math.acos(-1+2*(i+.5)/N),th=Math.sqrt(N*Math.PI)*ph,R=640,x=R*Math.sin(ph)*Math.sin(th),y=R*Math.cos(ph),z=R*Math.sin(ph)*Math.cos(th),f=face(x,y,z);put(e,x,y,z,f[0],f[1])},
+ helix:function(e,i){var th=i*.4+Math.PI,R=500,x=R*Math.sin(th),z=R*Math.cos(th);put(e,x,-i*8.3+490,z,th,0)},
+ grid:function(e,i){put(e,((i%5)-2)*210,(((i/5|0)%4)-1.5)*190,((i/20|0)-2.5)*300,0,0)}
+};
+var mode='table',rx=-.08,ry=0,zoom=1,drag=null,ptrs={},pd=0,reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function lay(m,fresh){mode=m;els.forEach(function(e,i){e.style.setProperty('--d',fresh?'0s':(rnd()*.6)+'s');L[m](e,i)})}
+els.forEach(function(e){put(e,(rnd()-.5)*6000,(rnd()-.5)*6000,(rnd()-.5)*6000,rnd()*TP,rnd()*TP)});
+void stage.offsetWidth;
+els.forEach(function(e){e.classList.remove('init')});lay('table');
+document.querySelectorAll('button').forEach(function(b){b.onclick=function(){document.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b)});lay(b.dataset.m)}});
+function fit(){return Math.min(innerWidth*.96/1960,innerHeight*.8/1350)}
+function render(){var s=Math.min(3.2,fit()*zoom);stage.style.transform='translateZ('+(-P*(1/s-1))+'px) rotateX('+rx+'rad) rotateY('+ry+'rad)'}
+function tick(){if(!drag){if(mode=='table'){rx+=(-.08-rx)*.06;ry+=(0-ry)*.06}else if(!reduced)ry+=.0025}render();requestAnimationFrame(tick)}
+view.addEventListener('pointerdown',function(e){ptrs[e.pointerId]=[e.clientX,e.clientY];drag={x:e.clientX,y:e.clientY,moved:0,t:e.target};var k=Object.keys(ptrs);if(k.length==2)pd=Math.hypot(ptrs[k[0]][0]-ptrs[k[1]][0],ptrs[k[0]][1]-ptrs[k[1]][1])});
+addEventListener('pointermove',function(e){if(!ptrs[e.pointerId])return;var o=ptrs[e.pointerId],dx=e.clientX-o[0],dy=e.clientY-o[1];ptrs[e.pointerId]=[e.clientX,e.clientY];var k=Object.keys(ptrs);
+ if(k.length>=2){var d=Math.hypot(ptrs[k[0]][0]-ptrs[k[1]][0],ptrs[k[0]][1]-ptrs[k[1]][1]);if(pd)zoom=Math.min(3,Math.max(.5,zoom*d/pd));pd=d;drag&&(drag.moved=99);return}
+ if(!drag)return;drag.moved+=Math.abs(dx)+Math.abs(dy);if(drag.moved>6){ry+=dx*.006;rx=Math.max(-1.4,Math.min(1.4,rx-dy*.006))}});
+function up(e){delete ptrs[e.pointerId];pd=0;if(drag&&e.type=='pointerup'&&drag.moved<=6){var t=e.target.closest&&e.target.closest('.el'),was=t&&t.classList.contains('on');els.forEach(function(x){x.classList.remove('on')});if(t&&!was)t.classList.add('on')}
+ if(!Object.keys(ptrs).length)drag=null}
+addEventListener('pointerup',up);addEventListener('pointercancel',up);
+view.addEventListener('wheel',function(e){e.preventDefault();zoom=Math.min(3,Math.max(.5,zoom*Math.exp(-e.deltaY*.001)))},{passive:false});
+tick();
+})();
+</script></body></html>

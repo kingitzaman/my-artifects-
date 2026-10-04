@@ -1,0 +1,119 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Neural Synapse Animation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@1,500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#020306;--bar:#1c1c20;--fg:#f4f4f6;--dim:rgba(244,244,246,.45);--teal:#3fe0c5;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#020306;--bar:#1c1c20;--fg:#f4f4f6;--dim:rgba(244,244,246,.45);--teal:#3fe0c5}}
+:root[data-theme="dark"]{--bg:#020306;--bar:#1c1c20;--fg:#f4f4f6;--dim:rgba(244,244,246,.45);--teal:#3fe0c5}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+h1{position:fixed;left:0;right:0;top:0;margin:0;padding:calc(env(safe-area-inset-top,0px) + 14px) 0 14px;text-align:center;pointer-events:none;background:var(--bar);color:var(--fg);font:italic 500 clamp(1.05rem,4.2vw,1.8rem)/1 'Poppins',system-ui,sans-serif;z-index:7}
+.scanlines{position:fixed;inset:0;pointer-events:none;z-index:6;background:repeating-linear-gradient(to bottom,transparent 0,transparent 3px,rgba(0,0,0,.07) 3px,rgba(0,0,0,.07) 4px);opacity:.35}
+.vig{position:fixed;inset:0;pointer-events:none;z-index:5;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.6))}
+#hud{position:fixed;z-index:8;left:12px;top:calc(env(safe-area-inset-top,0px) + 58px);width:178px;padding:9px 10px;box-sizing:border-box;pointer-events:none;color:rgba(190,215,255,.75);font-size:8px;letter-spacing:.12em;text-transform:uppercase;background:rgba(8,14,40,.55);border:1px solid rgba(120,160,255,.16);border-radius:4px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#hud b{display:block;font-weight:700;letter-spacing:.28em;color:#dfe9ff;margin-bottom:7px}
+#hud b::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--teal);box-shadow:0 0 6px var(--teal);margin-right:7px;vertical-align:1px}
+#hud div{display:flex;justify-content:space-between;margin:3px 0}#hud i{font-style:normal;color:#e8f0ff}
+#st{color:var(--teal)!important}#st.f{color:#ff8a4a!important}
+#bar{height:2px;background:rgba(120,160,255,.15);margin:7px 0 6px}#bar u{display:block;height:100%;width:0;background:linear-gradient(90deg,#3fe0c5,#ff4ad8)}
+#osc{display:block;width:100%;height:34px}
+#hint{position:fixed;left:0;right:0;bottom:0;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 14px);text-align:center;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);pointer-events:none;z-index:7;transition:opacity 1s}
+</style></head><body>
+<canvas id="gl"></canvas><div class="vig"></div><div class="scanlines"></div><h1>Neural Synapse Animation</h1>
+<div id="hud"><b>Neural Synapse</b><div>Membrane<i id="mv">-70.0 mV</i></div><div>Spikes<i id="sp">0</i></div><div>State<i id="st">RESTING</i></div><div id="bar" style="display:block"><u id="fill"></u></div><canvas id="osc" width="340" height="68"></canvas></div>
+<div id="hint">tap or click to fire · space</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script>
+(function(){
+var cv=document.getElementById('gl'),R;
+try{R=new THREE.WebGLRenderer({canvas:cv,antialias:true})}catch(e){document.body.insertAdjacentHTML('beforeend','<p style="color:#fff;position:fixed;inset:0;display:grid;place-items:center">WebGL is required.</p>');return}
+var reduced=matchMedia('(prefers-reduced-motion: reduce)').matches,mob=innerWidth<700;
+R.setPixelRatio(Math.min(devicePixelRatio||1,2));R.setClearColor(0x020306,1);
+var S=new THREE.Scene(),cam=new THREE.PerspectiveCamera(45,1,.1,100);
+var rv=function(s){return new THREE.Vector3((Math.random()-.5)*s,(Math.random()-.5)*s,(Math.random()-.5)*s)};
+// ---- merged neuron geometry
+var PO=[],NO=[],IX=[],AP=[],AS=[],off=0;
+function addGeo(g,pf,seed){var pa=g.attributes.position.array,na=g.attributes.normal.array,n=pa.length/3,i;for(i=0;i<n;i++){PO.push(pa[i*3],pa[i*3+1],pa[i*3+2]);NO.push(na[i*3],na[i*3+1],na[i*3+2]);AP.push(pf(i));AS.push(seed)}var ix=g.index.array;for(i=0;i<ix.length;i++)IX.push(ix[i]+off);off+=n}
+function tube(pts,rad,pd,seed,ts,tp){var cv2=new THREE.CatmullRomCurve3(pts),rs=5,g=new THREE.TubeGeometry(cv2,ts,rad,rs,false),pa=g.attributes.position.array,ln=cv2.getLength(),ring=rs+1,C=[],i;
+ for(i=0;i<=ts;i++)C.push(cv2.getPointAt(i/ts));
+ for(i=0;i<pa.length/3;i++){var r=Math.floor(i/ring),c=C[r],s=1-tp*r/ts;pa[i*3]=c.x+(pa[i*3]-c.x)*s;pa[i*3+1]=c.y+(pa[i*3+1]-c.y)*s;pa[i*3+2]=c.z+(pa[i*3+2]-c.z)*s}
+ addGeo(g,function(i){return pd+ln*Math.floor(i/ring)/ts},seed);return ln}
+function knob(p,r,pd,seed){var g=new THREE.SphereGeometry(r,8,6),pa=g.attributes.position.array;for(var i=0;i<pa.length;i+=3){pa[i]+=p.x;pa[i+1]+=p.y;pa[i+2]+=p.z}addGeo(g,function(){return pd},seed)}
+function grow(p0,dir,len,rad,depth,pd,seed){
+ var pts=[p0.clone()],p=p0.clone(),d=dir.clone(),i;
+ for(i=0;i<5;i++){d.add(rv(.5)).normalize();p.addScaledVector(d,len/5);pts.push(p.clone())}
+ var ln=tube(pts,rad,pd,seed,10,.4);
+ if(depth>0){var n=Math.random()<.4?3:2;for(var k=0;k<n;k++){var ix=2+Math.floor(Math.random()*4);grow(pts[ix],d.clone().add(rv(1.6)).normalize(),len*.74,rad*.66,depth-1,pd+ln*ix/5,seed)}
+ } else knob(p,Math.max(.06,rad*1.7),pd+ln,seed)}
+var SX=-1.3,depth=mob?3:4,i;
+for(i=0;i<11;i++){var a=(i+Math.random()*.6)/11*6.2832;if(Math.abs(Math.atan2(Math.sin(a),Math.cos(a)))<.45)continue;var dir=new THREE.Vector3(Math.cos(a),Math.sin(a),(Math.random()-.5)*.9).normalize();grow(new THREE.Vector3(SX,0,0).addScaledVector(dir,.6),dir,1.9,.085,depth,0,Math.random()*.9)}
+var ax=[];for(i=0;i<=14;i++)ax.push(new THREE.Vector3(SX+.6+i*1.0,Math.sin(i*.55)*.35+(Math.random()-.5)*.12,Math.sin(i*.4)*.25));
+tube(ax,.14,0,.97,70,.25);
+[2,5,8,11].forEach(function(k){var o=ax[k],dd=new THREE.Vector3(.5,(k%2?1:-1),(Math.random()-.5)).normalize();grow(o,dd,1.3,.05,1,k,Math.random()*.9)});
+// soma
+var sg=new THREE.SphereGeometry(.75,36,26),sp=sg.attributes.position.array;
+for(i=0;i<sp.length;i+=3){var x=sp[i],y=sp[i+1],z=sp[i+2],f=1+.1*Math.sin(x*5+1.3)*Math.sin(y*4.3)*Math.sin(z*5.7)+.04*Math.sin(x*11+y*7);sp[i]=x*f+SX;sp[i+1]=y*f;sp[i+2]=z*f}
+addGeo(sg,function(){return 0},.5);
+var geo=new THREE.BufferGeometry();
+geo.setAttribute('position',new THREE.Float32BufferAttribute(PO,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(NO,3));geo.setAttribute('aPath',new THREE.Float32BufferAttribute(AP,1));geo.setAttribute('aSeed',new THREE.Float32BufferAttribute(AS,1));
+geo.setIndex(new THREE.BufferAttribute(off<65535?new Uint16Array(IX):new Uint32Array(IX),1));
+var mat=new THREE.ShaderMaterial({uniforms:{uT:{value:-1},uFlash:{value:0},uTime:{value:0}},
+ vertexShader:'attribute float aPath,aSeed;varying vec3 vN;varying float vP,vS;void main(){vN=normalize(normalMatrix*normal);vP=aPath;vS=aSeed;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+ fragmentShader:'precision highp float;uniform float uT,uFlash,uTime;varying vec3 vN;varying float vP,vS;'+
+ 'vec3 hue(float h){return clamp(abs(mod(h*6.+vec3(0.,4.,2.),6.)-3.)-1.,0.,1.);}'+
+ 'float band(float d){return smoothstep(-.14,.05,d)*exp(-max(d,0.)*1.1);}'+
+ 'void main(){vec3 n=normalize(vN);float fr=pow(1.-abs(n.z),2.4);float df=max(dot(n,normalize(vec3(-.4,.6,.7))),0.);'+
+ 'vec3 col=vec3(.12,.17,.22)*(.35+.95*df)+vec3(.22,.32,.42)*fr*.9;'+
+ 'if(uT>=0.){float p=max(vP,0.),fr2=uT*5.5,pl=band(fr2-p)+.75*band(fr2-p-2.4),env=1.-smoothstep(4.5,7.,uT);'+
+ 'vec3 c=vS>.95?vec3(1.,.28,.06):mix(vec3(1.),hue(fract(p*.11+vS+uT*.12)),.9);'+
+ 'col+=(c*pl*3.4+vec3(1.)*pow(pl,3.)*1.2)*env;}' +
+ 'if(vP<=0.&&uFlash>0.)col+=vec3(1.,.93,1.)*uFlash*(.8+fr*1.4);'+
+ 'gl_FragColor=vec4(col,1.);}'})
+var neuron=new THREE.Mesh(geo,mat);neuron.frustumCulled=false;S.add(neuron);
+// flash sprite
+var cc=document.createElement('canvas');cc.width=cc.height=128;var cx=cc.getContext('2d'),gr=cx.createRadialGradient(64,64,0,64,64,64);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.25,'rgba(255,220,255,.55)');gr.addColorStop(1,'rgba(160,80,255,0)');cx.fillStyle=gr;cx.fillRect(0,0,128,128);
+var spr=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cc),blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:0}));spr.position.set(SX,0,.4);spr.scale.set(5,5,1);S.add(spr);
+// dust
+var dn=420,dp=new Float32Array(dn*3);for(i=0;i<dn;i++){dp[i*3]=(Math.random()-.3)*30;dp[i*3+1]=(Math.random()-.5)*14;dp[i*3+2]=(Math.random()-.5)*14}
+var dg=new THREE.BufferGeometry();dg.setAttribute('position',new THREE.BufferAttribute(dp,3));var dust=new THREE.Points(dg,new THREE.PointsMaterial({size:.04,color:0x7f9fc0,transparent:true,opacity:.45,depthWrite:false,blending:THREE.AdditiveBlending}));S.add(dust);
+// post
+var comp=null,bloom=null;
+function size(){var w=innerWidth,h=innerHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();if(comp)comp.setSize(w,h)}
+if(THREE.EffectComposer&&THREE.UnrealBloomPass&&THREE.RenderPass){comp=new THREE.EffectComposer(R);comp.addPass(new THREE.RenderPass(S,cam));bloom=new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.3,.8,.12);comp.addPass(bloom)}
+addEventListener('resize',size);size();
+// HUD
+var $=function(i){return document.getElementById(i)},mvE=$('mv'),spE=$('sp'),stE=$('st'),fill=$('fill'),osc=$('osc'),ox=osc.getContext('2d'),hist=[],spikes=0,hint=$('hint');
+for(i=0;i<120;i++)hist.push(-70);
+function mV(t){return t<0?-70+Math.sin(T*3)*.4:-70+112*Math.exp(-Math.pow((t-.1)/.07,2))-(t>.15?14*Math.exp(-Math.pow((t-.4)/.18,2)):0)}
+// firing
+var T=0,ft=-1,lastFire=0,shake=0,mx=0,my=0,cmx=0,cmy=0,hacc=0;
+function fire(){ft=0;lastFire=T;spikes++;spE.textContent=spikes;hint.style.opacity=0}
+addEventListener('pointerdown',fire);addEventListener('keydown',function(e){if(e.code=='Space'){e.preventDefault();fire()}});
+addEventListener('pointermove',function(e){mx=(e.clientX/innerWidth-.5)*2;my=(e.clientY/innerHeight-.5)*2});
+var last=performance.now();
+function frame(now){
+ var dt=Math.min(.05,(now-last)/1000);last=now;T+=dt;
+ if(ft>=0){ft+=dt;if(ft>7)ft=-1}else if(T-lastFire>7){fire()}
+ var fa=reduced?.5:1,flash=ft<0?0:(ft<.08?ft/.08:Math.exp(-(ft-.08)*4.5))*fa,pres=ft<0?0:Math.exp(-ft*.4);
+ mat.uniforms.uT.value=ft;mat.uniforms.uFlash.value=flash;mat.uniforms.uTime.value=T;spr.material.opacity=Math.min(1,flash*.9);
+ if(bloom)bloom.strength=.28+1.5*Math.max(flash,pres*.9);
+ shake=(reduced||ft<0||ft>.9)?0:(1-ft/.9)*.06;
+ cmx+=(mx-cmx)*.04;cmy+=(my-cmy)*.04;
+ var zz=10*Math.max(1,.95/cam.aspect);
+ cam.position.set(.6+Math.sin(T*.12)*.7*(reduced?0:1)+cmx*.6+(Math.random()-.5)*shake,Math.sin(T*.1)*.3*(reduced?0:1)-cmy*.4+(Math.random()-.5)*shake,zz);cam.lookAt(.8,0,0);
+ neuron.rotation.y=reduced?0:Math.sin(T*.2)*.1;dust.rotation.y=T*.01;
+ // HUD
+ var v=mV(ft);mvE.textContent=v.toFixed(1)+' mV';stE.textContent=ft<0?'RESTING':'FIRING';stE.className=ft<0?'':'f';fill.style.width=(ft<0?0:Math.max(0,100*(1-ft/7)))+'%';
+ hacc+=dt;if(hacc>.033){hacc=0;hist.push(v);hist.shift();ox.clearRect(0,0,340,68);ox.strokeStyle='#4aa3ff';ox.lineWidth=2;ox.beginPath();for(var j=0;j<120;j++){var X=j/119*340,Y=60-(hist[j]+75)/120*54;j?ox.lineTo(X,Y):ox.moveTo(X,Y)}ox.stroke()}
+ if(comp)comp.render();else R.render(S,cam);
+ requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+})();
+</script></body></html>

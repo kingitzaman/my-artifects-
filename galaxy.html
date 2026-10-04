@@ -1,0 +1,65 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Galaxy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#000;--dim:rgba(255,235,220,.5);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#000;--dim:rgba(255,235,220,.5)}}
+:root[data-theme="dark"]{--bg:#000;--dim:rgba(255,235,220,.5)}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+canvas.webgl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#hint{position:fixed;left:0;right:0;bottom:0;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 14px);text-align:center;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);pointer-events:none;transition:opacity 1.5s}
+#err{position:fixed;inset:0;display:none;place-items:center;color:#fff;text-align:center;padding:24px}
+</style></head><body>
+<canvas class="webgl"></canvas><div id="hint">drag to orbit · scroll or pinch to zoom</div><div id="err">WebGL is required to view this page.</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+var cv=document.querySelector('canvas.webgl'),R;
+try{R=new THREE.WebGLRenderer({canvas:cv,antialias:false})}catch(e){document.getElementById('err').style.display='grid';return}
+var reduced=matchMedia('(prefers-reduced-motion: reduce)').matches,dpr=Math.min(devicePixelRatio||1,2);
+R.setPixelRatio(dpr);R.setClearColor(0x000000,1);
+var S=new THREE.Scene(),cam=new THREE.PerspectiveCamera(60,1,.05,100);
+var P={count:innerWidth<700?70000:150000,radius:5,branches:2,spin:1,randomness:.5,power:3,inside:'#ff6030',outside:'#b060ff'};
+var mat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+ uniforms:{uTime:{value:0},uSize:{value:34},uPixel:{value:dpr}},
+ vertexShader:'uniform float uTime,uSize,uPixel;attribute float aScale;attribute float aRand;attribute vec3 aColor;varying vec3 vColor;varying float vSq;'+
+ 'void main(){vec4 mp=modelMatrix*vec4(position,1.);float ang=atan(mp.x,mp.z),d=length(mp.xz);ang+=(1./max(d,.35))*uTime*.25;mp.x=sin(ang)*d;mp.z=cos(ang)*d;mp.y+=sin(uTime*.6+d*3.+aRand*6.)*.04*(d*.3+.1);'+
+ 'vec4 vp=viewMatrix*mp;gl_Position=projectionMatrix*vp;float sq=step(.988,aRand);vSq=sq;gl_PointSize=min(uSize*aScale*(1.+sq*1.6)*uPixel/max(-vp.z,.05),70.*uPixel);vColor=aColor;}',
+ fragmentShader:'varying vec3 vColor;varying float vSq;void main(){vec2 c=gl_PointCoord-.5;float d=mix(length(c),max(abs(c.x),abs(c.y)),vSq);float a=smoothstep(.5,0.,d);a=pow(a,mix(2.6,1.1,vSq));gl_FragColor=vec4(vColor*.9,a);}'})
+var pts=null;
+function build(){
+ if(pts){S.remove(pts);pts.geometry.dispose()}
+ var n=P.count,pos=new Float32Array(n*3),col=new Float32Array(n*3),sc=new Float32Array(n),rd=new Float32Array(n),ci=new THREE.Color(P.inside),co=new THREE.Color(P.outside),m=new THREE.Color();
+ for(var i=0;i<n;i++){
+  var r=Math.random()*P.radius,sa=r*P.spin,ba=(i%P.branches)/P.branches*Math.PI*2;
+  var rx=Math.pow(Math.random(),P.power)*(Math.random()<.5?1:-1)*P.randomness*r,ry=Math.pow(Math.random(),P.power)*(Math.random()<.5?1:-1)*P.randomness*r*.6,rz=Math.pow(Math.random(),P.power)*(Math.random()<.5?1:-1)*P.randomness*r;
+  pos[i*3]=Math.cos(ba+sa)*r+rx;pos[i*3+1]=ry;pos[i*3+2]=Math.sin(ba+sa)*r+rz;
+  m.copy(ci).lerp(co,r/P.radius);col[i*3]=m.r;col[i*3+1]=m.g;col[i*3+2]=m.b;
+  sc[i]=.35+Math.pow(Math.random(),3)*2.2;rd[i]=Math.random()}
+ var g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('aColor',new THREE.BufferAttribute(col,3));g.setAttribute('aScale',new THREE.BufferAttribute(sc,1));g.setAttribute('aRand',new THREE.BufferAttribute(rd,1));
+ pts=new THREE.Points(g,mat);pts.frustumCulled=false;S.add(pts)}
+build();
+function size(){var w=innerWidth,h=innerHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+addEventListener('resize',size);size();
+// camera: auto timeline + user offsets
+var KF=[[0,7,.3],[.22,7,.55],[.42,1.7,.6],[.58,2.2,1.38],[.78,4.5,1.2],[1,7,.3]];
+function auto(u){for(var i=0;i<KF.length-1;i++){var a=KF[i],b=KF[i+1];if(u<=b[0]){var t=(u-a[0])/(b[0]-a[0]);t=t*t*(3-2*t);return[a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]}}return[7,.3]}
+var ta=0,idle=10,oT=0,oP=0,oZ=1,cd=7,cp=.3,ct=0,ptr={},pd=0,T=0,last=performance.now(),hint=document.getElementById('hint');
+function touch(){idle=0;hint.style.opacity=0}
+cv.addEventListener('pointerdown',function(e){ptr[e.pointerId]=[e.clientX,e.clientY];var k=Object.keys(ptr);if(k.length==2)pd=Math.hypot(ptr[k[0]][0]-ptr[k[1]][0],ptr[k[0]][1]-ptr[k[1]][1]);touch()});
+addEventListener('pointermove',function(e){var o=ptr[e.pointerId];if(!o)return;var dx=e.clientX-o[0],dy=e.clientY-o[1];ptr[e.pointerId]=[e.clientX,e.clientY];var k=Object.keys(ptr);touch();
+ if(k.length>=2){var d=Math.hypot(ptr[k[0]][0]-ptr[k[1]][0],ptr[k[0]][1]-ptr[k[1]][1]);if(pd)oZ=Math.min(3,Math.max(.2,oZ*pd/d));pd=d;return}
+ oT-=dx*.005;oP-=dy*.005});
+function up(e){delete ptr[e.pointerId];pd=0}addEventListener('pointerup',up);addEventListener('pointercancel',up);
+cv.addEventListener('wheel',function(e){e.preventDefault();touch();oZ=Math.min(3,Math.max(.2,oZ*Math.exp(e.deltaY*.001)))},{passive:false});
+function frame(now){
+ var dt=Math.min(.05,(now-last)/1000);last=now;T+=dt*(reduced?.3:1);idle+=dt;mat.uniforms.uTime.value=T;
+ if(idle>3){if(!reduced)ta+=dt;var k=1-Math.exp(-dt*.5);oT-=oT*k;oP-=oP*k;oZ+=(1-oZ)*k;if(idle>6)hint.style.opacity=0}
+ var u=auto((ta%28)/28),zm=Math.max(1,.75/cam.aspect);
+ var td=Math.min(14,Math.max(.8,u[0]*zm*oZ)),tp=Math.min(3.09,Math.max(.05,u[1]+oP)),tt=T*.04+oT*1;
+ var k2=1-Math.exp(-dt*4);cd+=(td-cd)*k2;cp+=(tp-cp)*k2;ct+=(tt-ct)*k2;
+ cam.position.set(cd*Math.sin(cp)*Math.sin(ct),cd*Math.cos(cp),cd*Math.sin(cp)*Math.cos(ct));cam.lookAt(0,0,0);
+ R.render(S,cam);requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+})();
+</script></body></html>
